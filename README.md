@@ -2,7 +2,7 @@
 Postman collection for Salesforce Commerce Cloud OCAPI (Open Commerce API)
 
 ## Usage
-* [Download Collection](../../raw/master/SFCC_OCAPI.postman_collection)
+* [Download Collection](../../raw/master/SFCC_OCAPI.postman_collection.json)
 * Import it in your Postman environment
 * Edit the collection by adding these data at *Pre-Request Scripts*
   * **ocapi-instance-host** - Hostname or public domain for your SFCC instance (e.g. `development-eu01-mycompanyname.demandware.net`),
