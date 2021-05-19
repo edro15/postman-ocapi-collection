@@ -1,0 +1,389 @@
+{
+	"info": {
+		"_postman_id": "9383a6af-cafa-49e8-abca-3d866d597a00",
+		"name": "SFCC OCAPI",
+		"description": "Postman scripts to get SFCC Order by using BM credentials",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "BM grants",
+			"event": [
+				{
+					"listen": "prerequest",
+					"script": {
+						"exec": [
+							"var CryptoJS = require('crypto-js');",
+							"",
+							"const bmUsername = pm.environment.get('bm_username');",
+							"const bmPassword = pm.environment.get('bm_password');",
+							"const ocapiClientPwd = pm.environment.get('ocapi-client-secret');",
+							"",
+							"const rawStr = CryptoJS.enc.Utf8.parse(`${bmUsername}:${bmPassword}:${ocapiClientPwd}`);",
+							"const base64Encoded = CryptoJS.enc.Base64.stringify(rawStr);",
+							"",
+							"pm.environment.set('USER_CREDENTIALS', base64Encoded);",
+							""
+						],
+						"type": "text/javascript"
+					}
+				},
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"const jsonData = pm.response.json();",
+							"",
+							"pm.test('Access_token exists', function() {",
+							"    pm.expect(jsonData.access_token).to.be.a('string');",
+							"});",
+							"",
+							"if (pm.response.code === 200 || pm.response.code === 201) {",
+							"    pm.environment.set('ACCESS_TOKEN', jsonData.access_token);",
+							"    // Added global ACCESS_TOKEN",
+							"    pm.globals.set(\"ACCESS_TOKEN\", jsonData.access_token);",
+							"}",
+							""
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"name": "Content-Type",
+						"type": "text",
+						"value": "application/x-www-form-urlencoded"
+					},
+					{
+						"key": "Authorization",
+						"type": "text",
+						"value": "Basic {{USER_CREDENTIALS}}"
+					}
+				],
+				"body": {
+					"mode": "urlencoded",
+					"urlencoded": [
+						{
+							"key": "grant_type",
+							"value": "urn:demandware:params:oauth:grant-type:client-id:dwsid:dwsecuretoken",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "https://{{ocapi-instance-host}}/dw/oauth2/access_token?client_id={{ocapi-client-id}}",
+					"protocol": "https",
+					"host": [
+						"{{ocapi-instance-host}}"
+					],
+					"path": [
+						"dw",
+						"oauth2",
+						"access_token"
+					],
+					"query": [
+						{
+							"key": "client_id",
+							"value": "{{ocapi-client-id}}"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Shop - GET Order",
+			"event": [
+				{
+					"listen": "prerequest",
+					"script": {
+						"exec": [
+							"// ORDER_NO matches the first hit of POST OrderSearch"
+						],
+						"type": "text/javascript"
+					}
+				},
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"const jsonData = pm.response.json();\r",
+							"\r",
+							"pm.test('Order_no exists', function() {\r",
+							"    pm.expect(jsonData.order_no).to.be.a('string');\r",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "GET",
+				"header": [
+					{
+						"key": "x-dw-client-id",
+						"value": "{{ocapi-client-id}}"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					},
+					{
+						"key": "Authorization",
+						"type": "text",
+						"value": "Bearer {{ACCESS_TOKEN}}"
+					}
+				],
+				"url": {
+					"raw": "https://{{ocapi-instance-host}}/s/{{ocapi-site}}/dw/shop/{{ocapi-version}}/orders/{{ORDER_NO}}",
+					"protocol": "https",
+					"host": [
+						"{{ocapi-instance-host}}"
+					],
+					"path": [
+						"s",
+						"{{ocapi-site}}",
+						"dw",
+						"shop",
+						"{{ocapi-version}}",
+						"orders",
+						"{{ORDER_NO}}"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Shop - POST OrderSearch",
+			"event": [
+				{
+					"listen": "prerequest",
+					"script": {
+						"exec": [
+							"var moment = require('moment');",
+							"",
+							"function format(date){",
+							"    formatted_dt = date.format(\"YYYY-MM-DDTHH:mm\");",
+							"    formatted_dt += \"Z\";",
+							"    return formatted_dt;",
+							"}",
+							"",
+							"// Defining a temporal interval to fetch orders:",
+							"// --> from beginning of the day till now",
+							"var now = moment();",
+							"var begin_dt = moment().startOf(\"day\");",
+							"pm.environment.set(\"end_date\", format(now));",
+							"pm.environment.set(\"begin_date\", format(begin_dt));",
+							"",
+							"",
+							"// Setting other parameters to test pagination",
+							"pm.environment.set(\"start_index\", 0);",
+							"pm.environment.set(\"count\", 25);"
+						],
+						"type": "text/javascript"
+					}
+				},
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"const jsonData = pm.response.json();",
+							"",
+							"if (pm.response.code === 200 || pm.response.code === 201) {",
+							"    // Adding a ORDER_NO to global variables",
+							"    if (jsonData.hasOwnProperty('hits')) {",
+							"        pm.globals.set('ORDER_NO', jsonData.hits[0].data.order_no);",
+							"    }",
+							"}"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{ACCESS_TOKEN}}",
+						"type": "text"
+					},
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"query\" : {\n        \"filtered_query\": {\n            \"query\": { \"match_all_query\": {} },\n            \"filter\": {\n                \"bool_filter\": {\n                    \"operator\": \"or\",\n                    \"filters\": [\n                        { \"range_filter\": { \"field\": \"creation_date\", \"from\": \"{{begin_date}}\", \"to\": \"{{end_date}}\" } },\n                        { \"range_filter\": { \"field\": \"last_modified\", \"from\": \"{{begin_date}}\", \"to\": \"{{end_date}}\" } }\n                    ]\n                }\n            }\n        }\n    },\n    \"count\": {{count}},\n    \"start\": {{start_index}},\n    \"sorts\" : [\n        { \n            \"field\":\"order_no\", \n            \"sort_order\":\"asc\"\n        }\n    ]\n}"
+				},
+				"url": {
+					"raw": "https://{{ocapi-instance-host}}/s/{{ocapi-site}}/dw/shop/{{ocapi-version}}/order_search",
+					"protocol": "https",
+					"host": [
+						"{{ocapi-instance-host}}"
+					],
+					"path": [
+						"s",
+						"{{ocapi-site}}",
+						"dw",
+						"shop",
+						"{{ocapi-version}}",
+						"order_search"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Data - POST JobSearch",
+			"event": [
+				{
+					"listen": "prerequest",
+					"script": {
+						"exec": [
+							"var moment = require('moment');",
+							"",
+							"function format(date){",
+							"\tformatted_dt = date.format(\"YYYY-MM-DDTHH:mm:ss\");",
+							"\tformatted_dt += \".000Z\";",
+							"  return formatted_dt;",
+							"}",
+							"",
+							"// Defining a temporal interval to fetch orders:",
+							"// --> from beginning of the day till now",
+							"var now = moment();",
+							"var begin = moment().startOf('day');",
+							"pm.environment.set(\"current_dt\", format(now));",
+							"pm.environment.set(\"begin_dt\", format(begin));",
+							"",
+							"",
+							"// Setting other parameters to test pagination",
+							"pm.environment.set(\"start_index\", 0);",
+							"pm.environment.set(\"count\", 25);"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{ACCESS_TOKEN}}",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"query\" : {\n        \"filtered_query\": {\n            \"query\": { \"match_all_query\": {} },\n            \"filter\": {\n                \"bool_filter\": {\n                    \"operator\": \"or\",\n                    \"filters\": [\n                        { \"range_filter\": { \"field\": \"start_time\", \"from\": \"{{begin_dt}}\", \"to\": \"{{current_dt}}\" } },\n                        { \"range_filter\": { \"field\": \"end_time\", \"from\": \"{{begin_dt}}\", \"to\": \"{{current_dt}}\" } }\n                    ]\n                }\n            }\n        }\n    },\n    \"count\": {{count}},\n    \"start\": {{start_index}},\n    \"sorts\" : [\n        {\n            \"field\":\"id\", \n            \"sort_order\":\"asc\"\n        }\n    ]\n}"
+				},
+				"url": {
+					"raw": "https://{{ocapi-instance-host}}/s/-/dw/data/{{ocapi-version}}/job_execution_search",
+					"protocol": "https",
+					"host": [
+						"{{ocapi-instance-host}}"
+					],
+					"path": [
+						"s",
+						"-",
+						"dw",
+						"data",
+						"{{ocapi-version}}",
+						"job_execution_search"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Meta - GET List of versions",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{ACCESS_TOKEN}}",
+						"type": "text"
+					},
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "https://{{ocapi-instance-host}}/s/-/dw/meta/v1/rest/data",
+					"protocol": "https",
+					"host": [
+						"{{ocapi-instance-host}}"
+					],
+					"path": [
+						"s",
+						"-",
+						"dw",
+						"meta",
+						"v1",
+						"rest",
+						"data"
+					]
+				}
+			},
+			"response": []
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					"pm.environment.set(\"bm_username\", \"<ADD YOUR USERNAME>\");",
+					"pm.environment.set(\"bm_password\", \"<ADD YOUR PASSWORD>\");",
+					"pm.environment.set(\"ocapi-client-secret\", \"<ADD YOUR CLIENT SECRET>\");",
+					"",
+					"pm.globals.set(\"ocapi-client-id\", \"<ADD YOUR CLIENT ID>\");",
+					"pm.globals.set(\"ocapi-site\", \"<ADD YOUR SITE ID>\");",
+					"pm.globals.set(\"ocapi-version\", \"<ADD OCAPI VERSION>\");",
+					"pm.globals.set(\"ocapi-instance-host\", \"<ADD YOUR SFCC HOSTNAME>\");"
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	]
+}
